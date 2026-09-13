@@ -209,11 +209,6 @@ details .body{padding:0 20px 16px}
 .notes input:focus,.notes textarea:focus{outline:2px solid var(--wish);outline-offset:1px;border-color:transparent}
 
 .summary{margin:12px 0 0;font-size:13.5px;color:#c6d7d8}
-.photos{margin-top:12px;display:grid;gap:6px}
-.photos img{width:100%;display:block;border-radius:7px;background:rgba(234,242,241,.06)}
-.photos .big{height:132px;object-fit:cover}
-.photos .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.photos .row img{height:74px;object-fit:cover}
 .photo-note{margin:9px 0 0;font-size:12px;color:var(--muted)}
 
 #tip{position:fixed;pointer-events:none;z-index:20;opacity:0;background:#06191e;
@@ -517,7 +512,7 @@ details .body{padding:0 20px 16px}
   </div>
 
   <div class="card" id="card" aria-live="polite">
-    <p class="card-empty">Наведите курсор на страну — здесь появятся её данные и фотографии.</p>
+    <p class="card-empty">Наведите курсор на страну — здесь появятся её данные и краткое описание.</p>
   </div>
 </div>
 
@@ -781,83 +776,45 @@ details .body{padding:0 20px 16px}
     }));
     card.appendChild(notes);
 
-    var box = document.createElement("div");
-    box.className = "photos";
-    card.appendChild(box);
     var note = document.createElement("p");
     note.className = "photo-note";
-    note.textContent = "Загружаем фотографии…";
+    note.textContent = "Загружаем описание…";
     card.appendChild(note);
 
     paintStatus(code);
 
-    if (cache[code]){ fillMedia(code, cache[code], box, note); return; }
+    if (cache[code]){ fillSummary(code, cache[code], note); return; }
     clearTimeout(loadTimer);
     loadTimer = setTimeout(function(){
-      loadMedia(code).then(function(data){
+      loadSummary(code).then(function(data){
         cache[code] = data;
-        if (shownCode === code) fillMedia(code, data, box, note);
+        if (shownCode === code) fillSummary(code, data, note);
       }).catch(function(){
-        if (shownCode === code) note.textContent = "Фотографии подгружаются из Википедии — нужен интернет.";
+        if (shownCode === code) note.textContent = "Описание подгружается из Википедии — нужен интернет.";
       });
     }, 320);
   }
 
-  function fillMedia(code, data, box, note){
-    box.innerHTML = "";
-    if (data.summary && !card.querySelector(".summary")){
+  function fillSummary(code, data, note){
+    if (!data.summary){ note.textContent = "Описание для этой страны не нашлось."; return; }
+    if (!card.querySelector(".summary")){
       var p = document.createElement("p");
       p.className = "summary";
       p.textContent = data.summary;
-      card.insertBefore(p, box);
+      card.insertBefore(p, note);
     }
-    if (!data.photos.length){ note.textContent = "Фотографии для этой страны не нашлись."; return; }
-    var big = document.createElement("img");
-    big.className = "big"; big.loading = "lazy";
-    big.alt = "Фотография: " + META[code].n;
-    big.src = data.photos[0];
-    box.appendChild(big);
-    if (data.photos.length > 1){
-      var row = document.createElement("div");
-      row.className = "row";
-      data.photos.slice(1, 3).forEach(function(src){
-        var im = document.createElement("img");
-        im.loading = "lazy";
-        im.alt = "Фотография: " + META[code].n;
-        im.src = src;
-        row.appendChild(im);
-      });
-      box.appendChild(row);
-    }
-    note.textContent = "Фотографии и описание: Википедия";
+    note.textContent = "Описание: Википедия";
   }
 
-  function loadMedia(code){
+  function loadSummary(code){
     var title = encodeURIComponent(META[code].w);
     var api = "https://ru.wikipedia.org/w/api.php?origin=*&format=json&formatversion=2&redirects=1";
-
-    var summaryReq = fetch(api + "&action=query&prop=extracts&exintro=1&explaintext=1&exsentences=2&titles=" + title)
+    return fetch(api + "&action=query&prop=extracts&exintro=1&explaintext=1&exsentences=2&titles=" + title)
       .then(function(r){ return r.json(); })
       .then(function(j){
         var page = j.query && j.query.pages && j.query.pages[0];
-        return page && page.extract ? page.extract : "";
-      }).catch(function(){ return ""; });
-
-    var photoReq = fetch(api + "&action=query&generator=images&gimlimit=40&prop=imageinfo&iiprop=url&iiurlwidth=520&titles=" + title)
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        var pages = (j.query && j.query.pages) || [];
-        var skip = /flag|coat|escudo|bandera|map|karte|locator|location|orthographic|icon|logo|emblem|seal|arms|wikimedia|commons|question_book|ambox|edit-|symbol|anthem/i;
-        return pages.filter(function(p){
-          var t = p.title || "";
-          var u = (p.imageinfo && p.imageinfo[0] && p.imageinfo[0].thumburl) || "";
-          return u && /\.(jpe?g|png)$/i.test(u.split("?")[0]) && !skip.test(t);
-        }).slice(0, 3).map(function(p){ return p.imageinfo[0].thumburl; });
-      }).catch(function(){ return []; });
-
-    return Promise.all([summaryReq, photoReq]).then(function(res){
-      return { summary: res[0], photos: res[1] };
-    });
+        return { summary: page && page.extract ? page.extract : "" };
+      });
   }
 
   /* ---------- поиск ---------- */
